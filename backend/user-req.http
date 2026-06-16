@@ -1,0 +1,110 @@
+﻿### Register Student
+POST http://localhost:4000/auth/users
+Content-Type: application/json
+
+{
+  "firstName": "student1",
+  "lastName": "",
+  "email": "student1@mail.com",
+  "role": "STUDENT",
+  "password": "student1",
+  "profileImageUrl": "https://example.com/avatars/user.png"
+}
+
+### Student Login
+POST http://localhost:4000/auth/login
+Content-Type: application/json
+
+{
+  "email": "student1@mail.com",
+  "password": "student1"
+}
+
+### Daily quote
+GET http://localhost:4000/auth/daily-quote
+
+### Read counselors
+GET http://localhost:4000/student-api/counselors
+
+### Read wellness articles
+GET http://localhost:4000/student-api/articles
+
+### Create anonymous post
+POST http://localhost:4000/forum-api/posts
+Content-Type: application/json
+
+{
+  "feeling": "STRESSED",
+  "content": "I feel mentally exhausted because of academic pressure."
+}
+
+### Read forum posts
+GET http://localhost:4000/forum-api/posts
+
+### Add comment
+PUT http://localhost:4000/forum-api/comments
+Content-Type: application/json
+
+{
+  "postId": "6a126ea98dc9b4af5fc36695",
+  "comment": "You are not alone. Many students feel this during difficult times."
+}
+
+### Support post
+PATCH http://localhost:4000/forum-api/support
+Content-Type: application/json
+
+{
+  "postId": "6a126ea98dc9b4af5fc36695"
+}
+
+### Report content
+POST http://localhost:4000/forum-api/reports
+Content-Type: application/json
+
+{
+  "targetType": "POST",
+  "post": "6a126ea98dc9b4af5fc36695",
+  "reason": "Harmful content"
+}
+
+### Request counselor
+POST http://localhost:4000/student-api/chat-requests
+Content-Type: application/json
+
+{
+  "counselor": "6a0f2573ca44eee838599d06",
+  "message": "I want to talk privately."
+}
+
+### Complete meditation
+POST http://localhost:4000/meditation-api/sessions
+Content-Type: application/json
+
+{
+  "sessionType": "DEEP_BREATHING",
+  "durationInMinutes": 10
+}
+
+### Meditation stats
+GET http://localhost:4000/meditation-api/stats
+
+### Mood check-in
+PUT http://localhost:4000/student-api/mood
+Content-Type: application/json
+
+{
+  "mood": "CALM",
+  "note": "Feeling better after breathing."
+}
+
+### AI Saathi
+POST http://localhost:4000/ai-saathi-api/chat
+Content-Type: application/json
+
+{
+  "message": "Can you suggest calming songs?I want hindi songs"
+}
+
+### Notifications
+GET http://localhost:4000/notification-api/notifications

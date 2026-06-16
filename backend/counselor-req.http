@@ -1,0 +1,73 @@
+﻿### Register Counselor
+POST http://localhost:4000/auth/users
+Content-Type: application/json
+
+{
+  "firstName": "counselor1",
+  "lastName": "",
+  "email": "counselor1@mail.com",
+  "role": "COUNSELOR",
+  "password": "counselor1",
+  "qualifications": "MA Psychology",
+  "certifications": "Counseling Certificate",
+  "yearsOfExperience": 3,
+  "expertise": "Stress Management, Anxiety Relief, Study Motivation",
+  "bio": "Student wellness counselor"
+}
+
+### Counselor Login
+POST http://localhost:4000/auth/login
+Content-Type: application/json
+
+{
+  "email": "counselor1@mail.com",
+  "password": "counselor1"
+}
+
+### Update profile
+PUT http://localhost:4000/counselor-api/profile
+Content-Type: application/json
+
+{
+  "qualifications": "MA Psychology",
+  "certifications": "Counseling Certificate",
+  "yearsOfExperience": 4,
+  "expertise": ["Stress Management", "Overthinking Control"],
+  "availabilityStatus": "AVAILABLE",
+  "bio": "I support students with calm emotional guidance."
+}
+
+### Create new Article
+POST http://localhost:4000/counselor-api/article
+Content-Type: application/json
+
+{
+  "counselor": "6a0f2573ca44eee838599d06",
+  "title": "Stress Management for Students",
+  "category": "Stress Management",
+  "content": "Start with one calm breath and one small task."
+}
+
+### Read own articles
+GET http://localhost:4000/counselor-api/articles
+
+### Read chat requests
+GET http://localhost:4000/counselor-api/chat-requests
+
+### Accept chat request
+PATCH http://localhost:4000/counselor-api/chat-requests
+Content-Type: application/json
+
+{
+  "requestId": "6a12dcd78dc9b4af5fc366ba",
+  "status": "ACCEPTED"
+}
+
+### Send private message
+PUT http://localhost:4000/counselor-api/chats
+Content-Type: application/json
+
+{
+  "chatId": "6a12ddc48dc9b4af5fc366bc",
+  "message": "I am here to listen. Please share slowly and comfortably."
+}
