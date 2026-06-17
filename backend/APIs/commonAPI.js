@@ -112,8 +112,8 @@ commonApp.post("/login", async (req, res) => {
 
   res.cookie("token", signedToken, {
     httpOnly: true,
-    secure: false,
-    sameSite: "lax",
+    secure: true,
+    sameSite: "none",
   });
 
   let userObj = user.toObject();
@@ -125,7 +125,7 @@ commonApp.post("/login", async (req, res) => {
 //Route for Logout
 commonApp.get("/logout", (req, res) => {
   //delete token from cookie storage
-  res.clearCookie("token", { httpOnly: true, secure: false, sameSite: "lax" });
+  res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "none" });
   //send res
   res.status(200).json({ message: "Logout successful" });
 });
