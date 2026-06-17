@@ -40,11 +40,12 @@ function Header() {
           to="/"
           className={`${navBrandClass} flex items-center gap-3`}
         >
-         <img
+       <img
   src={logoIcon}
   alt="Mano Saathi logo"
-  className="h-14 sm:h-16 w-auto object-contain drop-shadow-[0_6px_12px_rgba(24,76,56,0.18)]"
+  className="h-14 sm:h-16 w-auto object-contain rounded-full border-4 border-green-600 drop-shadow-[0_6px_12px_rgba(24,76,56,0.18)]"
 />
+
 
           <span className="leading-tight">
             Mano Saathi
