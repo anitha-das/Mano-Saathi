@@ -11,7 +11,7 @@ function AiSaathiWidget() {
   ]);
 
   const sendMessage = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || loading) return;
     const userText = input.trim();
     const nextMessages = [...messages, { role: "user", text: userText }];
     setMessages(nextMessages);
@@ -21,7 +21,7 @@ function AiSaathiWidget() {
       setLoading(true);
       const res = await axios.post(
         `${API_BASE_URL}/ai-saathi-api/chat`,
-        { message: userText, history: nextMessages.slice(-6) },
+        { message: userText, history: messages.slice(-8) },
         { withCredentials: true },
       );
       setMessages([...nextMessages, { role: "model", text: res.data.payload.reply }]);
