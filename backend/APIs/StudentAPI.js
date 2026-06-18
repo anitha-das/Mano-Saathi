@@ -31,10 +31,18 @@ studentApp.post("/chat-requests", verifyToken("STUDENT"), async (req, res) => {
     return res.status(404).json({ message: "Counselor not found" });
   }
 
-  const existingRequest = await ChatRequestModel.findOne({ student: req.user.id, counselor, status: "PENDING" });
+  const existingRequest = await ChatRequestModel.findOne({
+    student: req.user.id,
+    counselor,
+    status: { $in: ["PENDING", "ACCEPTED"] },
+  });
 
-  if (existingRequest) {
+  if (existingRequest?.status === "PENDING") {
     return res.status(400).json({ message: "Request already pending" });
+  }
+
+  if (existingRequest?.status === "ACCEPTED") {
+    return res.status(400).json({ message: "You are already connected with this counsellor." });
   }
 
   const requestDoc = new ChatRequestModel({ student: req.user.id, counselor, message });

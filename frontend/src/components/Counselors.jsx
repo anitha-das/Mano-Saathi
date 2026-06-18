@@ -7,6 +7,7 @@ import { cardClass, headingClass, bodyText, mutedText, primaryBtn, emptyStateCla
 function Counselors() {
   const [counselors, setCounselors] = useState([]);
   const [articles, setArticles] = useState([]);
+  const [requests, setRequests] = useState([]);
 
   const getCounselors = async () => {
     try {
@@ -26,19 +27,55 @@ function Counselors() {
     }
   };
 
+  const getRequests = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/student-api/chat-requests`, { withCredentials: true });
+      setRequests(res.data.payload || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to load counselor requests");
+    }
+  };
+
   useEffect(() => {
     getCounselors();
     getArticles();
+    getRequests();
   }, []);
 
   const requestCounselor = async (counselorId) => {
     try {
+      const existingStatus = getRequestStatus(counselorId);
+
+      if (existingStatus === "PENDING") {
+        return toast.error("Request already pending.");
+      }
+
+      if (existingStatus === "ACCEPTED") {
+        return toast.error("You are already connected with this counsellor.");
+      }
+
       const message = window.prompt("Write a short message for the counselor") || "I want private support.";
       const res = await axios.post(`${API_BASE_URL}/student-api/chat-requests`, { counselor: counselorId, message }, { withCredentials: true });
+      setRequests((prev) => [res.data.payload, ...prev]);
       toast.success(res.data.message);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to request counselor");
     }
+  };
+
+  const getRequestStatus = (counselorId) => {
+    const activeRequest = requests.find((requestObj) => {
+      const requestCounselorId = requestObj.counselor?._id || requestObj.counselor;
+      return String(requestCounselorId) === String(counselorId) && ["PENDING", "ACCEPTED"].includes(requestObj.status);
+    });
+
+    return activeRequest?.status;
+  };
+
+  const getButtonLabel = (status) => {
+    if (status === "PENDING") return "Request Pending";
+    if (status === "ACCEPTED") return "Connected";
+    return "Connect with Counsellor";
   };
 
   return (
@@ -61,8 +98,12 @@ function Counselors() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-7 mt-7">
-          {counselors.map((counselorObj) => (
+        <div className="grid grid-cols-1 gap-7 mt-7">
+          {counselors.map((counselorObj) => {
+            const requestStatus = getRequestStatus(counselorObj._id);
+            const isRequestDisabled = requestStatus === "PENDING" || requestStatus === "ACCEPTED";
+
+            return (
             <div key={counselorObj._id} className="group relative overflow-hidden rounded-lg border border-[#DDE7D8] bg-[#FFFDF7] shadow-[0_14px_32px_rgba(24,76,56,0.10)] hover:-translate-y-1 hover:shadow-[0_22px_45px_rgba(24,76,56,0.16)] transition duration-300">
               <div className="absolute inset-x-0 top-0 h-28 bg-[linear-gradient(120deg,#EDF4E8,#FFFDF7)]" />
               <div className="relative p-6 sm:p-7">
@@ -104,11 +145,22 @@ function Counselors() {
 
                 <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-[#DDE7D8] pt-5">
                   <p className={mutedText}>{counselorObj.counselorProfile?.yearsOfExperience || 0} years experience</p>
-                  <button className={`${primaryBtn} w-full sm:w-auto`} onClick={() => requestCounselor(counselorObj._id)}>Connect with Counselor</button>
+                  <div className="w-full sm:w-auto">
+                    <button
+                      className={`${primaryBtn} w-full sm:w-auto disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[0_12px_24px_rgba(14,74,55,0.26)]`}
+                      disabled={isRequestDisabled}
+                      onClick={() => requestCounselor(counselorObj._id)}
+                    >
+                      {getButtonLabel(requestStatus)}
+                    </button>
+                    {requestStatus === "PENDING" && <p className={`${mutedText} mt-2 text-center sm:text-right`}>Request already pending.</p>}
+                    {requestStatus === "ACCEPTED" && <p className={`${mutedText} mt-2 text-center sm:text-right`}>You are already connected with this counsellor.</p>}
+                  </div>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
           {counselors.length === 0 && <p className={emptyStateClass}>No counselors available yet.</p>}
         </div>
       </section>
