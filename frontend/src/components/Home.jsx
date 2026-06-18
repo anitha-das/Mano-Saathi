@@ -14,8 +14,8 @@ import {
 function Home() {
   const supportPillars = [
     { title: "Share", text: "Post anonymously and express what you are carrying without pressure.", icon: "SH" },
-    { title: "Support", text: "Find gentle community replies from students who understand.", icon: "SP" },
-    { title: "Learn", text: "Read counselor-led resources for stress, anxiety, and self-care.", icon: "LR" },
+    { title: "Support", text: "Find gentle community replies from the students who understands you .", icon: "SP" },
+    { title: "Learn", text: "Read counselor-led resources for stress, anxiety, depression and self-care.", icon: "LR" },
     { title: "Grow", text: "Build steady habits with meditation streaks and mood check-ins.", icon: "GR" },
   ];
 
