@@ -1,85 +1,45 @@
-﻿import { config } from "dotenv";
+import { config } from "dotenv";
 config();
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const AI_TIMEOUT = Number(process.env.GEMINI_TIMEOUT_MS) || 12000;
 
-const systemPrompt = `You are AI Saathi, a friendly emotional wellness assistant for students on MANO-SAATHI.
+const systemPrompt = `You are AI Saathi, a conversational student mental wellness assistant for MANO-SAATHI.
 
-Your role is to provide calm, emotionally safe, supportive, natural, and student-friendly conversations.
+Your job is to respond like a real, intelligent, warm assistant.
 
-Behave like a warm, understanding companion — not like a doctor, therapist, or robotic chatbot.
+Core behavior:
+- Understand the user's latest message.
+- Use recent conversation history to answer follow-up questions.
+- Continue the conversation naturally instead of restarting advice.
+- Adapt immediately when the user changes topic.
+- Avoid repeating earlier wording, paragraphs, or advice.
+- Ask a thoughtful follow-up question only when it helps.
+- Give practical, student-friendly support without sounding scripted.
 
-Guidelines:
-- Respond naturally and conversationally.
-- Understand greetings, casual chats, emotional struggles, motivation requests, study stress, anxiety, loneliness, burnout, calming recommendations, and wellness guidance.
-- Keep responses supportive, practical, and emotionally comforting.
-- Avoid sounding repetitive or overly dramatic.
-- Use the user's latest message as the main focus.
-- Use recent conversation history for follow-up questions, but do not repeat your previous answer.
-- If the user changes topics, adapt to the new topic immediately.
-- Keep responses short to medium length unless the user asks for detailed help.
-- When users ask for recommendations, examples, songs, study tips, routines, calming ideas, or wellness suggestions, provide specific useful examples naturally instead of generic guidance.
-- Respond directly to the user's request first before giving emotional reassurance.
-- Maintain a positive, emotionally safe, hopeful tone.
-
-Safety Rules:
-- Never give harmful advice.
-- Never encourage self-harm, violence, or dangerous behavior.
-- Never provide toxic or abusive responses.
+Mental wellness safety:
+- Be empathetic, calm, and supportive.
 - Do not diagnose medical or psychological conditions.
-- If the user appears in serious emotional danger, encourage them to contact a trusted person, counselor, emergency service, or crisis support immediately.
+- Do not present yourself as a therapist or doctor.
+- Never encourage self-harm, violence, or dangerous behavior.
+- If a user appears to be in immediate danger, encourage urgent support from a trusted person, counselor, emergency services, or local crisis support.
 
-Your goal is to make students feel heard, calmer, supported, and emotionally safer after each conversation.`;
+Style:
+- Keep replies concise but meaningful.
+- Be natural and conversational.
+- Respond directly to what the user actually said.`;
 
-const fallbackReplies = {
-  exam: "Exam stress can feel heavy, but you do not have to solve everything at once. Pick one subject, set a 25-minute study block, and write the three topics that matter most today. After that, take a short break and repeat gently.",
-  sleep: "Poor sleep often gets worse when stress keeps the mind active. Tonight, try a simple wind-down: stop studying 30 minutes before bed, dim your screen, write tomorrow's first task on paper, and do slow breathing for two minutes.",
-  morning: "Tomorrow morning, keep it simple: drink water, do one slow breathing round, review your top three tasks, and start with the easiest useful step for 20 minutes. A calm start matters more than a perfect one.",
-  lonely: "Feeling lonely can be really painful. Try reaching out to one safe person with a small message like, 'Can we talk for a few minutes?' You can also share anonymously in the community if speaking directly feels too hard.",
-  anxiety: "When anxiety rises, bring your attention back to the present. Try naming five things you can see, relax your shoulders, and choose one tiny next action. You are not behind for needing a slower pace.",
-  greeting: "Hi, I am here with you. Tell me what is on your mind today, and we can take it one step at a time.",
-  default: "I hear you. Let us focus on what you just shared and make it smaller: name the main feeling, choose one practical next step, and give yourself permission to move gently. What part feels hardest right now?",
-};
-
-const emergencyWords = [
-  "suicide",
-  "kill myself",
-  "end my life",
-  "self harm",
-  "hurt myself",
-  "i want to die",
-  "can't live",
-  "cannot live",
-];
-
-const getEmergencySupportReply = () => {
-  return "I am really sorry you are feeling this much pain. Please do not stay alone with this right now. Contact a trusted person, your counselor, or local emergency services immediately. You deserve urgent support and care in this moment.";
-};
-
-const hasEmergencyLanguage = (message) => {
-  const lowerMessage = message.toLowerCase();
-  return emergencyWords.some((word) => lowerMessage.includes(word));
-};
-
-const getFallbackReply = (message) => {
-  const lowerMessage = message.toLowerCase();
-
-  if (/\b(exam|test|marks|study|studying|syllabus|assignment)\b/.test(lowerMessage)) return fallbackReplies.exam;
-  if (/\b(sleep|insomnia|tired|can't sleep|cannot sleep|wake up)\b/.test(lowerMessage)) return fallbackReplies.sleep;
-  if (/\b(tomorrow|morning|routine|plan|schedule)\b/.test(lowerMessage)) return fallbackReplies.morning;
-  if (/\b(lonely|alone|isolated|no friends)\b/.test(lowerMessage)) return fallbackReplies.lonely;
-  if (/\b(anxious|anxiety|panic|overthinking|stressed|stress)\b/.test(lowerMessage)) return fallbackReplies.anxiety;
-  if (/^(hi|hello|hey|namaste)\b/.test(lowerMessage.trim())) return fallbackReplies.greeting;
-
-  return fallbackReplies.default;
+const createAiServiceError = (message, statusCode = 503) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
 };
 
 const normalizeHistory = (message, history = []) => {
   const normalized = [];
   const latestMessage = String(message).trim();
-  const cleanHistory = Array.isArray(history) ? history.slice(-10) : [];
+  const cleanHistory = Array.isArray(history) ? history.slice(-16) : [];
 
   for (const item of cleanHistory) {
     const role = item?.role === "model" ? "model" : item?.role === "user" ? "user" : null;
@@ -91,27 +51,82 @@ const normalizeHistory = (message, history = []) => {
 
     const previous = normalized[normalized.length - 1];
     if (previous?.role === role) {
-      previous.text = `${previous.text}\n${text}`.slice(0, 1600);
+      previous.text = `${previous.text}\n${text}`.slice(0, 2200);
     } else {
-      normalized.push({ role, text: text.slice(0, 1200) });
+      normalized.push({ role, text: text.slice(0, 1800) });
     }
   }
 
-  return normalized.slice(-8);
+  return normalized.slice(-12);
 };
 
-const buildContents = (message, history = []) => {
+const getRecentModelReplies = (history = []) => {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .filter((item) => item?.role === "model" && item?.text)
+    .slice(-4)
+    .map((item) => String(item.text).trim())
+    .filter(Boolean);
+};
+
+const normalizeForComparison = (text) => {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const getSimilarity = (firstText, secondText) => {
+  const firstWords = new Set(normalizeForComparison(firstText).split(" ").filter((word) => word.length > 3));
+  const secondWords = new Set(normalizeForComparison(secondText).split(" ").filter((word) => word.length > 3));
+
+  if (firstWords.size === 0 || secondWords.size === 0) return 0;
+
+  let overlap = 0;
+  for (const word of firstWords) {
+    if (secondWords.has(word)) overlap += 1;
+  }
+
+  return overlap / Math.min(firstWords.size, secondWords.size);
+};
+
+const isRepetitiveReply = (reply, history = []) => {
+  const recentReplies = getRecentModelReplies(history);
+  const normalizedReply = normalizeForComparison(reply);
+
+  if (!normalizedReply) return true;
+
+  return recentReplies.some((previousReply) => {
+    return normalizeForComparison(previousReply) === normalizedReply || getSimilarity(previousReply, reply) > 0.82;
+  });
+};
+
+const buildContents = (message, history = [], retryReason = "") => {
   const cleanHistory = normalizeHistory(message, history);
 
-  const contents = cleanHistory
-    .map((item) => ({
-      role: item.role,
-      parts: [{ text: item.text }],
-    }));
+  const contents = cleanHistory.map((item) => ({
+    role: item.role,
+    parts: [{ text: item.text }],
+  }));
+
+  const recentModelReplies = getRecentModelReplies(history);
+  const repetitionInstruction = recentModelReplies.length
+    ? `\n\nDo not repeat these recent AI Saathi replies. Use them only as context:\n${recentModelReplies.map((reply, index) => `${index + 1}. ${reply.slice(0, 500)}`).join("\n")}`
+    : "";
+
+  const retryInstruction = retryReason
+    ? `\n\nPrevious generation problem: ${retryReason}. Generate a fresh response with different wording and direct attention to the latest message.`
+    : "";
 
   contents.push({
     role: "user",
-    parts: [{ text: `Latest student message: ${String(message).slice(0, 2000)}\n\nRespond directly to this message. If it is a follow-up, use the recent context. Avoid repeating your previous response.` }],
+    parts: [
+      {
+        text: `Latest student message:\n${String(message).slice(0, 2200)}${repetitionInstruction}${retryInstruction}\n\nReply as AI Saathi.`,
+      },
+    ],
   });
 
   return contents;
@@ -127,16 +142,7 @@ const extractReply = (data) => {
   return parts.map((part) => part.text).filter(Boolean).join(" ").trim();
 };
 
-export const getAiSaathiReply = async (message, history = []) => {
-  if (hasEmergencyLanguage(message)) {
-    return getEmergencySupportReply();
-  }
-
-  if (!process.env.GEMINI_API_KEY) {
-    console.log("GEMINI_API_KEY is missing");
-    return getFallbackReply(message);
-  }
-
+const requestGeminiReply = async (message, history, retryReason = "") => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT);
 
@@ -152,11 +158,11 @@ export const getAiSaathiReply = async (message, history = []) => {
         systemInstruction: {
           parts: [{ text: systemPrompt }],
         },
-        contents: buildContents(message, history),
+        contents: buildContents(message, history, retryReason),
         generationConfig: {
-          temperature: 0.8,
-          topP: 0.9,
-          maxOutputTokens: 300,
+          temperature: retryReason ? 0.95 : 0.85,
+          topP: 0.95,
+          maxOutputTokens: 420,
         },
         safetySettings: [
           { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
@@ -170,21 +176,38 @@ export const getAiSaathiReply = async (message, history = []) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.log("Gemini API error", response.status, errorText);
-      return getFallbackReply(message);
+      throw createAiServiceError("AI Saathi is temporarily unavailable. Please try again in a moment.", 503);
     }
 
     const data = await response.json();
     const reply = extractReply(data);
 
     if (!reply) {
-      return getFallbackReply(message);
+      throw createAiServiceError("AI Saathi could not generate a response right now. Please try again.", 503);
     }
 
     return reply;
   } catch (err) {
+    if (err.statusCode) throw err;
     console.log("AI Saathi error", err.message);
-    return getFallbackReply(message);
+    throw createAiServiceError("AI Saathi is temporarily unavailable. Please try again in a moment.", 503);
   } finally {
     clearTimeout(timeout);
   }
+};
+
+export const getAiSaathiReply = async (message, history = []) => {
+  if (!process.env.GEMINI_API_KEY) {
+    console.log("GEMINI_API_KEY is missing");
+    throw createAiServiceError("AI Saathi is not configured yet. Please add the Gemini API key and try again.", 503);
+  }
+
+  const firstReply = await requestGeminiReply(message, history);
+
+  if (!isRepetitiveReply(firstReply, history)) {
+    return firstReply;
+  }
+
+  const retryReply = await requestGeminiReply(message, history, "The first reply was too similar to a recent AI response");
+  return retryReply;
 };

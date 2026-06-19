@@ -11,7 +11,11 @@ aiSaathiApp.post("/chat", verifyToken("STUDENT", "COUNSELOR"), async (req, res) 
     return res.status(400).json({ message: "Enter a message" });
   }
 
-  const reply = await getAiSaathiReply(String(message).trim(), history);
+  try {
+    const reply = await getAiSaathiReply(String(message).trim(), history);
 
-  res.status(200).json({ message: "AI Saathi response", payload: { reply } });
+    res.status(200).json({ message: "AI Saathi response", payload: { reply } });
+  } catch (err) {
+    res.status(err.statusCode || 503).json({ message: err.message || "AI Saathi is temporarily unavailable. Please try again." });
+  }
 });
