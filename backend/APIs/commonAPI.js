@@ -1,6 +1,7 @@
-﻿import exp from "express";
+import exp from "express";
 import { UserModel } from "../models/UserModel.js";
 import { QuoteModel } from "../models/QuoteModel.js";
+import { bhagavadGitaWellnessQuotes } from "../data/BhagavadGitaQuotes.js";
 import { hash, compare } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config } from "dotenv";
@@ -11,6 +12,42 @@ import cloudinary from "../config/cloudinary.js";
 const { sign } = jwt;
 export const commonApp = exp.Router();
 config();
+
+const LAST_QUOTE_COOKIE = "manoSaathiLastQuote";
+const quoteRotationState = { database: null, fallback: null };
+
+const getPreviousQuoteIndex = (req, sourceName) => {
+  const rawValue = req.cookies?.[LAST_QUOTE_COOKIE];
+  if (!rawValue) return quoteRotationState[sourceName];
+
+  const [storedSource, storedIndex] = String(rawValue).split(":");
+  const parsedIndex = Number(storedIndex);
+
+  if (storedSource !== sourceName || !Number.isInteger(parsedIndex)) {
+    return quoteRotationState[sourceName];
+  }
+
+  return parsedIndex;
+};
+
+const pickQuoteIndex = (quoteCount, previousIndex) => {
+  if (quoteCount <= 1) return 0;
+
+  const randomIndex = Math.floor(Math.random() * quoteCount);
+  if (randomIndex !== previousIndex) return randomIndex;
+
+  return (randomIndex + 1 + Math.floor(Math.random() * (quoteCount - 1))) % quoteCount;
+};
+
+const rememberQuoteIndex = (res, sourceName, index) => {
+  quoteRotationState[sourceName] = index;
+  res.cookie(LAST_QUOTE_COOKIE, `${sourceName}:${index}`, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24 * 30,
+  });
+};
 
 //Route for register
 commonApp.post("/users", upload.single("profileImageUrl"), async (req, res, next) => {
@@ -161,15 +198,28 @@ commonApp.put("/password", verifyToken("STUDENT", "COUNSELOR", "ADMIN"), async (
 });
 
 //Daily quote
-commonApp.get("/daily-quote", async (req, res) => {
-  const quotes = await QuoteModel.find({ isQuoteActive: true });
+commonApp.get("/daily-quote", async (req, res, next) => {
+  try {
+    const activeQuoteCount = await QuoteModel.countDocuments({ isQuoteActive: true });
 
-  if (quotes.length === 0) {
-    return res.status(200).json({ message: "quote", payload: { quote: "Small daily efforts create meaningful growth.", category: "Mind Balance" } });
+    if (activeQuoteCount > 0) {
+      const previousIndex = getPreviousQuoteIndex(req, "database");
+      const selectedIndex = pickQuoteIndex(activeQuoteCount, previousIndex);
+      const [quote] = await QuoteModel.find({ isQuoteActive: true }).sort({ createdAt: 1, _id: 1 }).skip(selectedIndex).limit(1).lean();
+
+      if (quote) {
+        rememberQuoteIndex(res, "database", selectedIndex);
+        return res.status(200).json({ message: "quote", payload: quote });
+      }
+    }
+
+    const previousIndex = getPreviousQuoteIndex(req, "fallback");
+    const selectedIndex = pickQuoteIndex(bhagavadGitaWellnessQuotes.length, previousIndex);
+    const fallbackQuote = bhagavadGitaWellnessQuotes[selectedIndex];
+
+    rememberQuoteIndex(res, "fallback", selectedIndex);
+    return res.status(200).json({ message: "quote", payload: fallbackQuote });
+  } catch (err) {
+    next(err);
   }
-
-  const dayNumber = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  const quote = quotes[dayNumber % quotes.length];
-
-  res.status(200).json({ message: "quote", payload: quote });
 });
