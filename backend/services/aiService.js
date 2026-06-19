@@ -1,16 +1,9 @@
 import { config } from "dotenv";
 config();
 
-const AI_TIMEOUT = Number(process.env.GEMINI_TIMEOUT_MS) || 12000;
-const GEMINI_MODELS = [
-  process.env.GEMINI_MODEL,
-  ...(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash,gemini-1.5-flash")
-    .split(",")
-    .map((model) => model.trim())
-    .filter(Boolean),
-]
-  .filter(Boolean)
-  .filter((model, index, models) => models.indexOf(model) === index);
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const AI_TIMEOUT = Number(process.env.AI_TIMEOUT_MS) || 12000;
 
 const systemPrompt = `You are AI Saathi, a conversational student mental wellness assistant for MANO-SAATHI.
 
@@ -24,6 +17,12 @@ Core behavior:
 - Avoid repeating earlier wording, paragraphs, or advice.
 - Ask a thoughtful follow-up question only when it helps.
 - Give practical, student-friendly support without sounding scripted.
+
+Topics you can help with:
+- Greetings and casual conversation.
+- Emotional wellness, stress, anxiety, loneliness, motivation, and confidence.
+- Exams, study planning, productivity, sleep, mindfulness, and daily routines.
+- General student questions, while staying supportive and grounded.
 
 Mental wellness safety:
 - Be empathetic, calm, and supportive.
@@ -43,57 +42,57 @@ const createAiServiceError = (message, statusCode = 503) => {
   return error;
 };
 
-const getGeminiApiUrl = (model) => {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+const emergencyPatterns = [
+  /\bsuicid(e|al)\b/i,
+  /\bkill myself\b/i,
+  /\bend my life\b/i,
+  /\bi want to die\b/i,
+  /\bi wanna die\b/i,
+  /\bhurt myself\b/i,
+  /\bself[-\s]?harm\b/i,
+  /\bcan't live\b/i,
+  /\bcannot live\b/i,
+];
+
+const hasEmergencyLanguage = (message) => {
+  return emergencyPatterns.some((pattern) => pattern.test(String(message || "")));
 };
 
-const parseGeminiError = async (response) => {
-  const errorText = await response.text();
-
-  try {
-    const errorJson = JSON.parse(errorText);
-    return {
-      raw: errorText,
-      message: errorJson?.error?.message,
-      status: errorJson?.error?.status,
-      retryDelay: errorJson?.error?.details?.find((detail) => detail["@type"] === "type.googleapis.com/google.rpc.RetryInfo")?.retryDelay,
-    };
-  } catch {
-    return { raw: errorText };
-  }
+const getEmergencySupportReply = () => {
+  return "I am really sorry you are feeling this much pain. Your safety matters right now. Please reach out immediately to a trusted person near you, your counsellor, campus support, or local emergency services. If you can, move away from anything you could use to hurt yourself and stay with someone until help is with you.";
 };
 
 const normalizeHistory = (message, history = []) => {
   const normalized = [];
   const latestMessage = String(message).trim();
-  const cleanHistory = Array.isArray(history) ? history.slice(-16) : [];
+  const cleanHistory = Array.isArray(history) ? history.slice(-18) : [];
 
   for (const item of cleanHistory) {
-    const role = item?.role === "model" ? "model" : item?.role === "user" ? "user" : null;
-    const text = String(item?.text || "").trim();
+    const role = item?.role === "model" || item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null;
+    const text = String(item?.text || item?.content || "").trim();
 
     if (!role || !text) continue;
     if (role === "user" && text === latestMessage) continue;
-    if (normalized.length === 0 && role === "model") continue;
+    if (normalized.length === 0 && role === "assistant") continue;
 
     const previous = normalized[normalized.length - 1];
     if (previous?.role === role) {
-      previous.text = `${previous.text}\n${text}`.slice(0, 2200);
+      previous.content = `${previous.content}\n${text}`.slice(0, 2400);
     } else {
-      normalized.push({ role, text: text.slice(0, 1800) });
+      normalized.push({ role, content: text.slice(0, 1800) });
     }
   }
 
   return normalized.slice(-12);
 };
 
-const getRecentModelReplies = (history = []) => {
+const getRecentAssistantReplies = (history = []) => {
   if (!Array.isArray(history)) return [];
 
   return history
-    .filter((item) => item?.role === "model" && item?.text)
+    .filter((item) => (item?.role === "model" || item?.role === "assistant") && (item?.text || item?.content))
     .slice(-4)
-    .map((item) => String(item.text).trim())
+    .map((item) => String(item.text || item.content).trim())
     .filter(Boolean);
 };
 
@@ -120,7 +119,7 @@ const getSimilarity = (firstText, secondText) => {
 };
 
 const isRepetitiveReply = (reply, history = []) => {
-  const recentReplies = getRecentModelReplies(history);
+  const recentReplies = getRecentAssistantReplies(history);
   const normalizedReply = normalizeForComparison(reply);
 
   if (!normalizedReply) return true;
@@ -130,93 +129,75 @@ const isRepetitiveReply = (reply, history = []) => {
   });
 };
 
-const buildContents = (message, history = [], retryReason = "") => {
+const buildGroqMessages = (message, history = [], retryReason = "") => {
   const cleanHistory = normalizeHistory(message, history);
-
-  const contents = cleanHistory.map((item) => ({
-    role: item.role,
-    parts: [{ text: item.text }],
-  }));
-
-  const recentModelReplies = getRecentModelReplies(history);
-  const repetitionInstruction = recentModelReplies.length
-    ? `\n\nDo not repeat these recent AI Saathi replies. Use them only as context:\n${recentModelReplies.map((reply, index) => `${index + 1}. ${reply.slice(0, 500)}`).join("\n")}`
+  const recentAssistantReplies = getRecentAssistantReplies(history);
+  const repetitionInstruction = recentAssistantReplies.length
+    ? `\n\nDo not repeat these recent AI Saathi replies. Treat them only as conversation context:\n${recentAssistantReplies.map((reply, index) => `${index + 1}. ${reply.slice(0, 500)}`).join("\n")}`
     : "";
-
   const retryInstruction = retryReason
-    ? `\n\nPrevious generation problem: ${retryReason}. Generate a fresh response with different wording and direct attention to the latest message.`
+    ? `\n\nPrevious generation issue: ${retryReason}. Generate a fresh, direct response with different wording.`
     : "";
 
-  contents.push({
-    role: "user",
-    parts: [
-      {
-        text: `Latest student message:\n${String(message).slice(0, 2200)}${repetitionInstruction}${retryInstruction}\n\nReply as AI Saathi.`,
-      },
-    ],
-  });
-
-  return contents;
+  return [
+    { role: "system", content: systemPrompt },
+    ...cleanHistory,
+    {
+      role: "user",
+      content: `Latest student message:\n${String(message).slice(0, 2200)}${repetitionInstruction}${retryInstruction}\n\nReply as AI Saathi.`,
+    },
+  ];
 };
 
-const extractReply = (data) => {
-  const parts = data?.candidates?.[0]?.content?.parts;
+const parseGroqError = async (response) => {
+  const errorText = await response.text();
 
-  if (!Array.isArray(parts)) {
-    return null;
+  try {
+    const errorJson = JSON.parse(errorText);
+    return {
+      raw: errorText,
+      message: errorJson?.error?.message,
+      type: errorJson?.error?.type,
+    };
+  } catch {
+    return { raw: errorText };
   }
-
-  return parts.map((part) => part.text).filter(Boolean).join(" ").trim();
 };
 
-const requestGeminiReply = async (model, message, history, retryReason = "") => {
+const requestGroqReply = async (message, history, retryReason = "") => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT);
 
   try {
-    const response = await fetch(getGeminiApiUrl(model), {
+    const response = await fetch(GROQ_API_URL, {
       method: "POST",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents: buildContents(message, history, retryReason),
-        generationConfig: {
-          temperature: retryReason ? 0.95 : 0.85,
-          topP: 0.95,
-          maxOutputTokens: 420,
-        },
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-        ],
+        model: GROQ_MODEL,
+        messages: buildGroqMessages(message, history, retryReason),
+        temperature: retryReason ? 0.9 : 0.75,
+        top_p: 0.9,
+        max_tokens: 450,
       }),
     });
 
     if (!response.ok) {
-      const errorDetails = await parseGeminiError(response);
-      console.log("Gemini API error", response.status, model, errorDetails.raw);
+      const errorDetails = await parseGroqError(response);
+      console.log("Groq API error", response.status, errorDetails.raw);
 
       if (response.status === 429) {
-        const quotaError = createAiServiceError("Gemini quota exceeded for the current model.", 429);
-        quotaError.isQuotaError = true;
-        quotaError.model = model;
-        quotaError.retryDelay = errorDetails.retryDelay;
-        throw quotaError;
+        throw createAiServiceError("AI Saathi is busy right now because the AI provider limit was reached. Please try again in a minute.", 429);
       }
 
       throw createAiServiceError("AI Saathi is temporarily unavailable. Please try again in a moment.", 503);
     }
 
     const data = await response.json();
-    const reply = extractReply(data);
+    const reply = data?.choices?.[0]?.message?.content?.trim();
 
     if (!reply) {
       throw createAiServiceError("AI Saathi could not generate a response right now. Please try again.", 503);
@@ -225,7 +206,7 @@ const requestGeminiReply = async (model, message, history, retryReason = "") => 
     return reply;
   } catch (err) {
     if (err.statusCode) throw err;
-    console.log("AI Saathi error", err.message);
+    console.log("Groq AI error", err.message);
     throw createAiServiceError("AI Saathi is temporarily unavailable. Please try again in a moment.", 503);
   } finally {
     clearTimeout(timeout);
@@ -233,29 +214,20 @@ const requestGeminiReply = async (model, message, history, retryReason = "") => 
 };
 
 export const getAiSaathiReply = async (message, history = []) => {
-  if (!process.env.GEMINI_API_KEY) {
-    console.log("GEMINI_API_KEY is missing");
-    throw createAiServiceError("AI Saathi is not configured yet. Please add the Gemini API key and try again.", 503);
+  if (hasEmergencyLanguage(message)) {
+    return getEmergencySupportReply();
   }
 
-  let lastQuotaError = null;
-
-  for (const model of GEMINI_MODELS) {
-    try {
-      const firstReply = await requestGeminiReply(model, message, history);
-
-      if (!isRepetitiveReply(firstReply, history)) {
-        return firstReply;
-      }
-
-      const retryReply = await requestGeminiReply(model, message, history, "The first reply was too similar to a recent AI response");
-      return retryReply;
-    } catch (err) {
-      if (!err.isQuotaError) throw err;
-      lastQuotaError = err;
-    }
+  if (!process.env.GROQ_API_KEY) {
+    console.log("GROQ_API_KEY is missing");
+    throw createAiServiceError("AI Saathi is not configured yet. Please add GROQ_API_KEY and try again.", 503);
   }
 
-  const retryText = lastQuotaError?.retryDelay ? ` Please try again after ${lastQuotaError.retryDelay}.` : " Please try again later.";
-  throw createAiServiceError(`AI Saathi has reached the Gemini quota for now.${retryText}`, 429);
+  const firstReply = await requestGroqReply(message, history);
+
+  if (!isRepetitiveReply(firstReply, history)) {
+    return firstReply;
+  }
+
+  return requestGroqReply(message, history, "The first reply was too similar to a recent AI response");
 };
