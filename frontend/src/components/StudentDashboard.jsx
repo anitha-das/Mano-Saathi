@@ -16,6 +16,72 @@ import {
   loadingClass,
 } from "../styles/common";
 
+const DAILY_QUOTE_SESSION_KEY = "manoSaathiDailyQuoteSession";
+const DAILY_QUOTE_HISTORY_KEY = "manoSaathiDailyQuoteHistory";
+
+const getTodayKey = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${now.getFullYear()}-${month}-${day}`;
+};
+
+const readStoredJson = (storage, key) => {
+  try {
+    return JSON.parse(storage.getItem(key));
+  } catch {
+    storage.removeItem(key);
+    return null;
+  }
+};
+
+const getStoredDailyQuote = () => {
+  const storedQuote = readStoredJson(sessionStorage, DAILY_QUOTE_SESSION_KEY);
+
+  if (storedQuote?.date === getTodayKey() && storedQuote?.quote?.quote) {
+    return storedQuote.quote;
+  }
+
+  sessionStorage.removeItem(DAILY_QUOTE_SESSION_KEY);
+  return null;
+};
+
+const getPreviousQuoteId = () => {
+  const quoteHistory = readStoredJson(localStorage, DAILY_QUOTE_HISTORY_KEY);
+  return quoteHistory?.quoteId || null;
+};
+
+const rememberDailyQuote = (quote) => {
+  if (!quote?.quote) return;
+
+  const quoteRecord = { date: getTodayKey(), quote };
+  sessionStorage.setItem(DAILY_QUOTE_SESSION_KEY, JSON.stringify(quoteRecord));
+  localStorage.setItem(DAILY_QUOTE_HISTORY_KEY, JSON.stringify({ date: quoteRecord.date, quoteId: quote._id || quote.quote }));
+};
+
+const getMillisecondsUntilNextDay = () => {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setHours(24, 0, 0, 0);
+
+  return tomorrow.getTime() - now.getTime() + 1000;
+};
+
+const fetchDailyQuote = async () => {
+  const storedQuote = getStoredDailyQuote();
+  if (storedQuote) return storedQuote;
+
+  const quoteRes = await axios.get(`${API_BASE_URL}/auth/daily-quote`, {
+    params: { excludeQuoteId: getPreviousQuoteId() },
+    withCredentials: true,
+  });
+  const selectedQuote = quoteRes.data.payload;
+  rememberDailyQuote(selectedQuote);
+
+  return selectedQuote;
+};
+
 function StudentDashboard() {
   const [quote, setQuote] = useState(null);
   const [stats, setStats] = useState(null);
@@ -26,10 +92,13 @@ function StudentDashboard() {
   const getDashboardData = async () => {
     try {
       setLoading(true);
-      const quoteRes = await axios.get(`${API_BASE_URL}/auth/daily-quote`, { withCredentials: true });
-      const statsRes = await axios.get(`${API_BASE_URL}/meditation-api/stats`, { withCredentials: true });
-      const articleRes = await axios.get(`${API_BASE_URL}/student-api/articles`, { withCredentials: true });
-      setQuote(quoteRes.data.payload);
+      const [selectedQuote, statsRes, articleRes] = await Promise.all([
+        fetchDailyQuote(),
+        axios.get(`${API_BASE_URL}/meditation-api/stats`, { withCredentials: true }),
+        axios.get(`${API_BASE_URL}/student-api/articles`, { withCredentials: true }),
+      ]);
+
+      setQuote(selectedQuote);
       setStats(statsRes.data.payload);
       setArticles(articleRes.data.payload || []);
     } catch (err) {
@@ -40,7 +109,25 @@ function StudentDashboard() {
   };
 
   useEffect(() => {
+    let quoteRefreshTimer;
+
+    const refreshQuoteOnDateChange = async () => {
+      sessionStorage.removeItem(DAILY_QUOTE_SESSION_KEY);
+
+      try {
+        const selectedQuote = await fetchDailyQuote();
+        setQuote(selectedQuote);
+      } catch (err) {
+        console.warn("Daily quote refresh failed", err);
+      } finally {
+        quoteRefreshTimer = setTimeout(refreshQuoteOnDateChange, getMillisecondsUntilNextDay());
+      }
+    };
+
     getDashboardData();
+    quoteRefreshTimer = setTimeout(refreshQuoteOnDateChange, getMillisecondsUntilNextDay());
+
+    return () => clearTimeout(quoteRefreshTimer);
   }, []);
 
   const onMoodSubmit = async (moodObj) => {
@@ -112,4 +199,3 @@ function StudentDashboard() {
 }
 
 export default StudentDashboard;
-

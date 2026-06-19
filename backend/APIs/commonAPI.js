@@ -1,6 +1,5 @@
 import exp from "express";
 import { UserModel } from "../models/UserModel.js";
-import { QuoteModel } from "../models/QuoteModel.js";
 import { bhagavadGitaWellnessQuotes } from "../data/BhagavadGitaQuotes.js";
 import { hash, compare } from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -13,40 +12,20 @@ const { sign } = jwt;
 export const commonApp = exp.Router();
 config();
 
-const LAST_QUOTE_COOKIE = "manoSaathiLastQuote";
-const quoteRotationState = { database: null, fallback: null };
+const getExcludedQuoteIndex = (excludeQuoteId) => {
+  if (!excludeQuoteId) return null;
 
-const getPreviousQuoteIndex = (req, sourceName) => {
-  const rawValue = req.cookies?.[LAST_QUOTE_COOKIE];
-  if (!rawValue) return quoteRotationState[sourceName];
-
-  const [storedSource, storedIndex] = String(rawValue).split(":");
-  const parsedIndex = Number(storedIndex);
-
-  if (storedSource !== sourceName || !Number.isInteger(parsedIndex)) {
-    return quoteRotationState[sourceName];
-  }
-
-  return parsedIndex;
+  const excludedIndex = bhagavadGitaWellnessQuotes.findIndex((quote) => quote._id === excludeQuoteId);
+  return excludedIndex >= 0 ? excludedIndex : null;
 };
 
-const pickQuoteIndex = (quoteCount, previousIndex) => {
+const pickQuoteIndex = (quoteCount, excludedIndex) => {
   if (quoteCount <= 1) return 0;
 
   const randomIndex = Math.floor(Math.random() * quoteCount);
-  if (randomIndex !== previousIndex) return randomIndex;
+  if (randomIndex !== excludedIndex) return randomIndex;
 
   return (randomIndex + 1 + Math.floor(Math.random() * (quoteCount - 1))) % quoteCount;
-};
-
-const rememberQuoteIndex = (res, sourceName, index) => {
-  quoteRotationState[sourceName] = index;
-  res.cookie(LAST_QUOTE_COOKIE, `${sourceName}:${index}`, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    maxAge: 1000 * 60 * 60 * 24 * 30,
-  });
 };
 
 //Route for register
@@ -200,25 +179,11 @@ commonApp.put("/password", verifyToken("STUDENT", "COUNSELOR", "ADMIN"), async (
 //Daily quote
 commonApp.get("/daily-quote", async (req, res, next) => {
   try {
-    const activeQuoteCount = await QuoteModel.countDocuments({ isQuoteActive: true });
+    const excludedIndex = getExcludedQuoteIndex(req.query?.excludeQuoteId);
+    const selectedIndex = pickQuoteIndex(bhagavadGitaWellnessQuotes.length, excludedIndex);
+    const quote = bhagavadGitaWellnessQuotes[selectedIndex];
 
-    if (activeQuoteCount > 0) {
-      const previousIndex = getPreviousQuoteIndex(req, "database");
-      const selectedIndex = pickQuoteIndex(activeQuoteCount, previousIndex);
-      const [quote] = await QuoteModel.find({ isQuoteActive: true }).sort({ createdAt: 1, _id: 1 }).skip(selectedIndex).limit(1).lean();
-
-      if (quote) {
-        rememberQuoteIndex(res, "database", selectedIndex);
-        return res.status(200).json({ message: "quote", payload: quote });
-      }
-    }
-
-    const previousIndex = getPreviousQuoteIndex(req, "fallback");
-    const selectedIndex = pickQuoteIndex(bhagavadGitaWellnessQuotes.length, previousIndex);
-    const fallbackQuote = bhagavadGitaWellnessQuotes[selectedIndex];
-
-    rememberQuoteIndex(res, "fallback", selectedIndex);
-    return res.status(200).json({ message: "quote", payload: fallbackQuote });
+    return res.status(200).json({ message: "quote", payload: quote });
   } catch (err) {
     next(err);
   }

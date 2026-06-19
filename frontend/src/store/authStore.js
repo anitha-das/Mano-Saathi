@@ -38,6 +38,7 @@ export const useAuth = create((set) => ({
       let res = await axios.get(`${API_BASE_URL}/auth/logout`, { withCredentials: true });
       //update state
       if (res.status === 200) {
+        sessionStorage.removeItem("manoSaathiDailyQuoteSession");
         set({ currentUser: null, isAuthenticated: false, error: null, loading: false });
       }
     } catch (err) {
@@ -69,4 +70,3 @@ export const useAuth = create((set) => ({
     }
   },
 }));
-
