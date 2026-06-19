@@ -1,9 +1,16 @@
 import { config } from "dotenv";
 config();
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const AI_TIMEOUT = Number(process.env.GEMINI_TIMEOUT_MS) || 12000;
+const GEMINI_MODELS = [
+  process.env.GEMINI_MODEL,
+  ...(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash,gemini-1.5-flash")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean),
+]
+  .filter(Boolean)
+  .filter((model, index, models) => models.indexOf(model) === index);
 
 const systemPrompt = `You are AI Saathi, a conversational student mental wellness assistant for MANO-SAATHI.
 
@@ -34,6 +41,26 @@ const createAiServiceError = (message, statusCode = 503) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+};
+
+const getGeminiApiUrl = (model) => {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+};
+
+const parseGeminiError = async (response) => {
+  const errorText = await response.text();
+
+  try {
+    const errorJson = JSON.parse(errorText);
+    return {
+      raw: errorText,
+      message: errorJson?.error?.message,
+      status: errorJson?.error?.status,
+      retryDelay: errorJson?.error?.details?.find((detail) => detail["@type"] === "type.googleapis.com/google.rpc.RetryInfo")?.retryDelay,
+    };
+  } catch {
+    return { raw: errorText };
+  }
 };
 
 const normalizeHistory = (message, history = []) => {
@@ -142,12 +169,12 @@ const extractReply = (data) => {
   return parts.map((part) => part.text).filter(Boolean).join(" ").trim();
 };
 
-const requestGeminiReply = async (message, history, retryReason = "") => {
+const requestGeminiReply = async (model, message, history, retryReason = "") => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT);
 
   try {
-    const response = await fetch(GEMINI_API_URL, {
+    const response = await fetch(getGeminiApiUrl(model), {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -174,8 +201,17 @@ const requestGeminiReply = async (message, history, retryReason = "") => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.log("Gemini API error", response.status, errorText);
+      const errorDetails = await parseGeminiError(response);
+      console.log("Gemini API error", response.status, model, errorDetails.raw);
+
+      if (response.status === 429) {
+        const quotaError = createAiServiceError("Gemini quota exceeded for the current model.", 429);
+        quotaError.isQuotaError = true;
+        quotaError.model = model;
+        quotaError.retryDelay = errorDetails.retryDelay;
+        throw quotaError;
+      }
+
       throw createAiServiceError("AI Saathi is temporarily unavailable. Please try again in a moment.", 503);
     }
 
@@ -202,12 +238,24 @@ export const getAiSaathiReply = async (message, history = []) => {
     throw createAiServiceError("AI Saathi is not configured yet. Please add the Gemini API key and try again.", 503);
   }
 
-  const firstReply = await requestGeminiReply(message, history);
+  let lastQuotaError = null;
 
-  if (!isRepetitiveReply(firstReply, history)) {
-    return firstReply;
+  for (const model of GEMINI_MODELS) {
+    try {
+      const firstReply = await requestGeminiReply(model, message, history);
+
+      if (!isRepetitiveReply(firstReply, history)) {
+        return firstReply;
+      }
+
+      const retryReply = await requestGeminiReply(model, message, history, "The first reply was too similar to a recent AI response");
+      return retryReply;
+    } catch (err) {
+      if (!err.isQuotaError) throw err;
+      lastQuotaError = err;
+    }
   }
 
-  const retryReply = await requestGeminiReply(message, history, "The first reply was too similar to a recent AI response");
-  return retryReply;
+  const retryText = lastQuotaError?.retryDelay ? ` Please try again after ${lastQuotaError.retryDelay}.` : " Please try again later.";
+  throw createAiServiceError(`AI Saathi has reached the Gemini quota for now.${retryText}`, 429);
 };
