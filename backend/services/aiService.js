@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 config();
 
-const GROQ_API_URL = process.env.GROQ_API_URL;
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 const AI_TIMEOUT = Number(process.env.AI_TIMEOUT_MS) || 12000;
 
