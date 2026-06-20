@@ -6,7 +6,6 @@ import { API_BASE_URL } from "../api/baseURL";
 import {
   cardClass,
   dashboardGrid,
-  headingClass,
   subHeadingClass,
   bodyText,
   mutedText,
@@ -82,6 +81,46 @@ const fetchDailyQuote = async () => {
   return selectedQuote;
 };
 
+const BotanicalLeafCluster = ({ position = "left" }) => {
+  const isRight = position.includes("right");
+  const isBottom = position.includes("bottom");
+  const clusterPosition = isRight ? "right-[-42px]" : "left-[-42px]";
+  const verticalPosition = isBottom ? "bottom-[-34px]" : "top-[-34px]";
+  const mirror = isRight ? "scale-x-[-1]" : "";
+  const tilt = isBottom ? "rotate-[10deg]" : "-rotate-[8deg]";
+
+  return (
+    <div className={["pointer-events-none absolute", verticalPosition, clusterPosition, "h-36 w-44 sm:h-44 sm:w-56 opacity-45", mirror, tilt].join(" ")} aria-hidden="true">
+      <span className="absolute left-16 top-8 h-32 w-[3px] origin-bottom rotate-[28deg] rounded-full bg-[#6F9678]/35 blur-[0.2px]" />
+      <span className="absolute left-7 top-11 h-16 w-8 rotate-[-26deg] rounded-[70%_10%_70%_10%] bg-[radial-gradient(circle_at_35%_30%,#DDEDDD,#7DA487_70%)] shadow-[inset_7px_0_16px_rgba(18,63,49,0.08)] blur-[0.1px]" />
+      <span className="absolute left-23 top-4 h-20 w-10 rotate-[13deg] rounded-[70%_12%_70%_12%] bg-[radial-gradient(circle_at_35%_30%,#E6F1E2,#86AA8E_74%)] shadow-[inset_8px_0_18px_rgba(18,63,49,0.08)] blur-[0.1px]" />
+      <span className="absolute left-21 top-25 h-24 w-14 rotate-[46deg] rounded-[72%_14%_72%_14%] bg-[radial-gradient(circle_at_38%_30%,#D9EADA,#5E8E75_78%)] shadow-[inset_10px_0_20px_rgba(18,63,49,0.10)] blur-[0.1px]" />
+      <span className="absolute left-1 top-24 h-20 w-16 rotate-[72deg] rounded-[76%_18%_76%_18%] bg-[radial-gradient(circle_at_40%_30%,#E6F1E2,#7DA487_76%)] shadow-[inset_10px_0_20px_rgba(18,63,49,0.08)] blur-[0.2px]" />
+    </div>
+  );
+};
+
+const QuoteCardVisual = ({ text }) => {
+  return (
+    <div className="relative isolate overflow-hidden rounded-lg border border-[#D7E4D1] bg-[radial-gradient(circle_at_center,#FFFDF7_0%,#F2F7EC_48%,#E4EFE2_100%)] px-5 py-8 sm:px-10 sm:py-9 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_12px_26px_rgba(24,76,56,0.08)] transition duration-300 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_32px_rgba(24,76,56,0.11)]">
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,253,247,0.82),rgba(237,244,232,0.38),rgba(255,253,247,0.78))]" aria-hidden="true" />
+      <div className="absolute inset-0 opacity-[0.16] bg-[radial-gradient(circle_at_20%_20%,#9CB9A7_0_1px,transparent_1px),radial-gradient(circle_at_75%_35%,#9CB9A7_0_1px,transparent_1px)] bg-[length:18px_18px,22px_22px]" aria-hidden="true" />
+      <BotanicalLeafCluster position="top-left" />
+      <BotanicalLeafCluster position="bottom-left" />
+      <BotanicalLeafCluster position="top-right" />
+      <BotanicalLeafCluster position="bottom-right" />
+
+      <div className="relative z-10 mx-auto flex min-h-28 max-w-2xl items-center justify-center text-center">
+        <p className="text-xl sm:text-2xl lg:text-3xl font-semibold leading-[1.45] tracking-[0.08em] text-[#123F31] [font-family:Georgia,serif]">
+          <span className="text-[#1F7A58]/80">&quot;</span>
+          {text}
+          <span className="text-[#1F7A58]/80">&quot;</span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
 function StudentDashboard() {
   const [quote, setQuote] = useState(null);
   const [stats, setStats] = useState(null);
@@ -148,9 +187,7 @@ function StudentDashboard() {
     <div>
       <div className={dashboardGrid}>
         <div className={`${cardClass} lg:col-span-2`}>
-          <p className={mutedText}>Daily Mind Balance</p>
-          <h2 className={`${headingClass} mt-3`}>{quote?.quote || "Small daily efforts create meaningful growth."}</h2>
-          <p className={`${bodyText} mt-4`}>{quote?.category || "Mind Balance"}</p>
+          <QuoteCardVisual text={quote?.quote || "Small daily efforts create meaningful growth."} />
         </div>
 
         <div className={cardClass}>
