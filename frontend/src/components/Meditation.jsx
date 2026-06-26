@@ -206,7 +206,7 @@ function Meditation() {
               <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#FFFDF7] border border-[#DDE7D8] text-center">
                 <p className={mutedText}>{activeSession.title}</p>
                 <p className="mt-3 text-5xl font-semibold text-[#0E4A37] tracking-tight">{formatTime(remainingSeconds)}</p>
-                <p className={`${bodyText} mt-3 text-sm`}>{isRunning ? "Breathe slowly and stay with the moment." : "Paused.    Resume when you are ready."}</p>
+                <p className={`${bodyText} mt-3 text-sm`}>{isRunning ? "Breathe slowly and stay with the moment." : "Paused. Resume when you are ready."}</p>
               </div>
             </div>
 
